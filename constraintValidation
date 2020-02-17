@@ -1,0 +1,174 @@
+/**
+ * 
+ */
+function pojoValidationService($http){
+	var pvs=this;
+	pvs.cachedFunctinality={};
+	pvs.isObject=function(value) {
+		return value && typeof value === 'object' && value.constructor === Object;
+	}
+	pvs.isString=function (value) {
+		return typeof value === 'string' || value instanceof String;
+	}
+	pvs.isNumber=function (value) {
+		return typeof value === 'number' && isFinite(value);
+	}
+	pvs.isArray=function (value) {
+		return value && typeof value === 'object' && value.constructor === Array;
+	}
+	pvs.isFunction=function (value) {
+		return typeof value === 'function';
+	}
+	pvs.isObject=function (value) {
+		return value && typeof value === 'object' && value.constructor === Object;
+	}
+	pvs.isNull=function (value) {
+		return value === null;
+	}
+	pvs.isUndefined=function (value) {
+		return typeof value === 'undefined';
+	}
+	pvs.isBoolean=function (value) {
+		return typeof value === 'boolean';
+	}
+	pvs.isRegExp=function (value) {
+		return value && typeof value === 'object' && value.constructor === RegExp;
+	}
+	pvs.isError=function (value) {
+		return value instanceof Error && typeof value.message !== 'undefined';
+	}
+	pvs.isDate=function (value) {
+		return value instanceof Date;
+	}
+	pvs.isSymbol=function (value) {
+		return typeof value === 'symbol';
+	}
+	pvs.getValidationConstraint=function(functionality){
+		var strURL = "validation.go/constraints/"+functionality;
+		return $http({
+			method	: 'GET', 
+			url		: strURL,
+		});
+	}
+	pvs.getValidationConstraintFromCache=function(functionalityName){
+		return $.Deferred(function(dfd){
+			if(pvs.cachedFunctinality && pvs.cachedFunctinality.hasOwnProperty(functionalityName)){
+				dfd.resolve(pvs.cachedFunctinality[functionalityName]);
+			}else{
+				if(functionalityName){
+					var promise=pvs.getValidationConstraint(functionalityName);
+					promise.success(function(data) {
+						pvs.cachedFunctinality[functionalityName]=data.result;
+						dfd.resolve(pvs.cachedFunctinality[functionalityName]);
+					}).error(function(error) {
+						dfd.reject(error);
+					}); 
+				}else{
+					dfd.reject("Invalid type for validation");
+				}
+			}			
+		});
+	}
+	pvs.validate=function(jsonObject,functionalityName){
+		return $.Deferred(function(dfd){
+			pvs.getValidationConstraintFromCache(functionalityName).then(function(pojoDefination){
+				try{
+					for(var key in jsonObject){
+						if(pojoDefination.hasOwnProperty(key)){
+							for(var constraint in pojoDefination[key]){
+								pvs.annontation[constraint](pojoDefination[key][constraint],jsonObject[key]);
+							}
+						}
+					}
+					dfd.resolve();
+				}catch(error){
+					dfd.reject(error);
+				}
+			},function(err){
+				dfd.reject(err);
+			})
+		})
+	}
+
+	pvs.annontation={
+			Max:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(value>validationObject.value){
+					throw validationObject.message;
+				}
+			},Min:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(value<validationObject.value){
+					throw validationObject.message;
+				}
+			},DecimalMin:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(value<validationObject.value){
+					throw validationObject.message;
+				}
+			},DecimalMax:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(value>validationObject.value){
+					throw validationObject.message;
+				}
+			},Digits:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(Number.isNaN(value)){
+					throw 'value must be numeric';
+				}
+				var numberArr = (n + "").split(".");
+				if(numberArr[0]>validationObject.integer || numberArr[1]>validationObject.fraction){
+					if(validationObject.message){
+						throw validationObject.message;
+					}else{
+						throw "value must be less than "+validationObject.integer+" digit integral part and "+validationObject.fraction+" digit fractional part";
+					}
+				}
+			},NotNull:function(validationObject,value){
+				if(!value){
+					throw validationObject.message?validationObject.message:"value should not be null";
+				}
+			},Null:function(validationObject,value){
+				if(!value){
+					throw validationObject.message?validationObject.message:"value should be null";
+				}
+			},Pattern:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				var regrex = new RegExp(validationObject.regexp);
+				if(!regrex.test(value)){
+					throw validationObject.message?validationObject.message:"Invalid value doesnot match regular expression";
+				}
+				
+			},Size:function(validationObject,value){
+				if(!value){
+					return;
+				}
+				if(pvs.isObject(value)){
+					value=Object.keys(value);
+				}
+				if(pvs.isString(value) || pvs.isArray(value)){
+					if(value.length<validationObject.min || value.length>validationObject.max){
+						if(validationObject.message){
+							throw validationObject.message;
+						}else{
+							throw "value must be between "+validationObject.min +" and "+validationObject.max+"(Inclusive)";
+						}
+					} 
+				}
+			}
+	};
+}
+angular.module("ConstraintValidation",[])
+.service("ValidationService",['$http',pojoValidationService]);
